@@ -372,7 +372,7 @@ function App() {
 
   if (initializing) return <div className="loading-screen"><Droplets className="spin" /><span>Cargando tus datos…</span></div>
   if (passwordRecovery && supabase) return <PasswordRecoveryScreen onComplete={() => setPasswordRecovery(false)} onNotice={setNotice} notice={notice} />
-  if (isSupabaseConfigured && !sessionUser) return <AuthScreen onNotice={setNotice} notice={notice} />
+  if (isSupabaseConfigured && !sessionUser) return <AuthScreen onAuthenticated={(user) => setSessionUser(user)} onNotice={setNotice} notice={notice} />
 
   return (
     <div className="app-shell">
@@ -465,7 +465,11 @@ function App() {
   )
 }
 
-function AuthScreen({ onNotice, notice }: { onNotice: (value: string) => void; notice: string }) {
+function AuthScreen({ onAuthenticated, onNotice, notice }: {
+  onAuthenticated: (user: { id: string; email?: string }) => void
+  onNotice: (value: string) => void
+  notice: string
+}) {
   const [mode, setMode] = useState<'login' | 'register' | 'recovery'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -479,7 +483,12 @@ function AuthScreen({ onNotice, notice }: { onNotice: (value: string) => void; n
       if (mode === 'register') {
         const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { display_name: displayName } } })
         if (error) onNotice(error.message)
-        else if (!data.session) onNotice('Revisa tu correo para confirmar tu cuenta.')
+        else if (data.session?.user) {
+          onNotice('')
+          onAuthenticated({ id: data.session.user.id, email: data.session.user.email })
+        } else {
+          onNotice('La cuenta se creó, pero no se inició la sesión. Intenta iniciar sesión con los datos de esa cuenta.')
+        }
       } else if (mode === 'recovery') {
         const { error } = await supabase.auth.resetPasswordForEmail(email)
         if (error) onNotice(error.message)
