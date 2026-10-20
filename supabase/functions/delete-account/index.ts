@@ -31,7 +31,9 @@ Deno.serve(async (request) => {
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  const secretKeysJson = Deno.env.get('SUPABASE_SECRET_KEYS')
+  const secretKeys = secretKeysJson ? JSON.parse(secretKeysJson) as Record<string, string> : {}
+  const serviceRoleKey = secretKeys.default ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   if (!supabaseUrl || !serviceRoleKey) {
     return Response.json({ error: 'Server configuration is incomplete' }, { status: 500, headers })
   }
