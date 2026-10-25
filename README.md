@@ -1,6 +1,6 @@
 # WaterMind
 
-Aplicación web para llevar un registro personal de hidratación. Incluye acceso y creación de cuenta con Supabase Auth, registros por usuario protegidos con Row Level Security, resumen diario, historial, estadísticas, recordatorios locales y exportación CSV.
+Aplicación web para llevar un registro personal de hidratación. Incluye acceso y creación de cuenta con Supabase Auth, registros por usuario protegidos con Row Level Security, resumen diario, historial, estadísticas y exportación CSV.
 
 ## Requisitos
 

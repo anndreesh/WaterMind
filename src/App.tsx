@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
-  Activity, Bell, CalendarDays, Check, ChevronDown, CircleHelp, Droplets,
+  Activity, CalendarDays, Check, ChevronDown, CircleHelp, Droplets,
   GlassWater, History, LogOut, Moon, MoreHorizontal, Plus, Settings2, Sun, Target,
   TrendingUp, UserRound, X,
 } from 'lucide-react'
@@ -10,13 +10,12 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import type { FormEvent } from 'react'
 import { z } from 'zod'
 import {
-  dateKey, defaultProfile, defaultReminders, drinkTypes, entriesForDate, formatTime,
+  dateKey, defaultProfile, drinkTypes, entriesForDate, formatTime,
   formatVolume, hydrationTotal, type DrinkEntry, type DrinkType, type Profile,
-  type ReminderSettings,
 } from './lib/hydration'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 
-type View = 'dashboard' | 'history' | 'statistics' | 'reminders' | 'settings'
+type View = 'dashboard' | 'history' | 'statistics' | 'settings'
 const entrySchema = z.object({
   drink_type: z.enum(['water', 'sparkling', 'tea', 'coffee', 'milk', 'juice', 'sports', 'other']),
   volume_ml: z.coerce.number().int().min(1, 'Ingresa una cantidad mayor a 0 ml.').max(5000, 'El máximo por registro es 5,000 ml.'),
@@ -30,7 +29,6 @@ const pageTitles: Record<View, string> = {
   dashboard: 'Resumen',
   history: 'Historial',
   statistics: 'Estadísticas',
-  reminders: 'Recordatorios',
   settings: 'Configuración',
 }
 
@@ -38,7 +36,6 @@ const navigation: { id: View; label: string; icon: typeof Activity }[] = [
   { id: 'dashboard', label: 'Resumen', icon: Activity },
   { id: 'history', label: 'Historial', icon: CalendarDays },
   { id: 'statistics', label: 'Estadísticas', icon: TrendingUp },
-  { id: 'reminders', label: 'Recordatorios', icon: Bell },
 ]
 
 const storage = {
@@ -84,7 +81,6 @@ function App() {
   const [view, setView] = useState<View>('dashboard')
   const [entries, setEntries] = useState<DrinkEntry[]>(() => storage.read('watermind.entries', []))
   const [profile, setProfile] = useState<Profile>(() => storage.read('watermind.profile', defaultProfile))
-  const [reminders, setReminders] = useState<ReminderSettings>(() => storage.read('watermind.reminders', defaultReminders))
   const [sessionUser, setSessionUser] = useState<{ id: string; email?: string } | null>(null)
   const [passwordRecovery, setPasswordRecovery] = useState(false)
   const [initializing, setInitializing] = useState(Boolean(isSupabaseConfigured))
@@ -126,21 +122,19 @@ function App() {
     if (!isSupabaseConfigured || !supabase || sessionUser) return
     storage.write('watermind.entries', entries)
     storage.write('watermind.profile', profile)
-    storage.write('watermind.reminders', reminders)
-  }, [entries, profile, reminders, sessionUser])
+  }, [entries, profile, sessionUser])
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase || !sessionUser) return
     let cancelled = false
     async function loadAccount() {
       setInitializing(true)
-      const [profileResult, entryResult, reminderResult] = await Promise.all([
+      const [profileResult, entryResult] = await Promise.all([
         supabase!.from('user_watermind').select('display_name,daily_goal_ml,preferred_unit,timezone,theme').eq('id', sessionUser!.id).single(),
         supabase!.from('drink_entries_watermind').select('*').eq('user_id', sessionUser!.id).order('consumed_at', { ascending: false }).limit(1000),
-        supabase!.from('reminder_settings_watermind').select('*').eq('user_id', sessionUser!.id).maybeSingle(),
       ])
       if (cancelled) return
-      const failed = [profileResult.error, entryResult.error, reminderResult.error].find(Boolean)
+      const failed = [profileResult.error, entryResult.error].find(Boolean)
       if (failed) setNotice(`No se pudieron cargar todos tus datos: ${failed.message}`)
       if (profileResult.data) {
         const row = profileResult.data
@@ -153,19 +147,6 @@ function App() {
         })
       }
       if (entryResult.data) setEntries(entryResult.data as DrinkEntry[])
-      if (reminderResult.data) {
-        const row = reminderResult.data
-        setReminders({
-          ...defaultReminders,
-          enabled: row.enabled,
-          start_time: row.start_time.slice(0, 5),
-          end_time: row.end_time.slice(0, 5),
-          interval_minutes: row.interval_minutes,
-          weekdays: row.weekdays,
-          timezone: row.timezone,
-          snoozed_until: row.snoozed_until ? new Date(row.snoozed_until).getTime() : null,
-        })
-      }
       setInitializing(false)
     }
     void loadAccount()
@@ -175,38 +156,6 @@ function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = profile.theme
   }, [profile.theme])
-
-  useEffect(() => {
-    if (!reminders.enabled) return
-    const timer = window.setInterval(() => {
-      if (!('Notification' in window) || Notification.permission !== 'granted') return
-      if (Date.now() < (reminders.snoozed_until ?? 0)) return
-      const now = new Date()
-      const localKey = dateKey(now, reminders.timezone ?? profile.timezone)
-      const weekday = new Date(`${localKey}T12:00:00`).getDay()
-      const time = new Intl.DateTimeFormat('en-GB', {
-        timeZone: reminders.timezone ?? profile.timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-      }).format(now)
-      const [hour, minute] = time.split(':').map(Number)
-      const [startHour, startMinute] = reminders.start_time.split(':').map(Number)
-      const [endHour, endMinute] = reminders.end_time.split(':').map(Number)
-      const minutes = hour * 60 + minute
-      const start = startHour * 60 + startMinute
-      const end = endHour * 60 + endMinute
-      if (!reminders.weekdays.includes(weekday) || minutes < start || minutes > end) return
-      const elapsedMinutes = minutes - start
-      if (elapsedMinutes < 0 || elapsedMinutes % reminders.interval_minutes !== 0) return
-      const key = `watermind.reminder.last.${localKey}`
-      const last = Number(localStorage.getItem(key) ?? 0)
-      if (Date.now() - last < reminders.interval_minutes * 60_000) return
-      new Notification('Un momento para hidratarte', {
-        body: `¿Te gustaría registrar ${reminders.suggested_volume_ml} ml?`,
-        icon: '/water-drop.svg',
-      })
-      localStorage.setItem(key, String(Date.now()))
-    }, 30_000)
-    return () => window.clearInterval(timer)
-  }, [reminders, profile.timezone])
 
   useEffect(() => {
     if (!notice) return
@@ -269,40 +218,6 @@ function App() {
     setNotice('Configuración guardada.')
   }
 
-  async function updateReminders(next: ReminderSettings) {
-    const value = { ...next, timezone: profile.timezone }
-    if (value.start_time >= value.end_time) {
-      setNotice('La hora de fin debe ser posterior a la hora de inicio.')
-      return
-    }
-    if (!value.weekdays.length) {
-      setNotice('Selecciona al menos un día para los recordatorios.')
-      return
-    }
-    if (value.suggested_volume_ml < 50 || value.suggested_volume_ml > 2000) {
-      setNotice('El volumen sugerido debe estar entre 50 y 2,000 ml.')
-      return
-    }
-    if (isSupabaseConfigured && supabase && sessionUser) {
-      const { error } = await supabase.from('reminder_settings_watermind').upsert({
-        user_id: sessionUser.id,
-        enabled: value.enabled,
-        start_time: value.start_time,
-        end_time: value.end_time,
-        interval_minutes: value.interval_minutes,
-        weekdays: value.weekdays,
-        timezone: profile.timezone,
-        snoozed_until: value.snoozed_until ? new Date(value.snoozed_until).toISOString() : null,
-      })
-      if (error) {
-        setNotice(`No se pudieron guardar los recordatorios: ${error.message}`)
-        return
-      }
-    }
-    setReminders(value)
-    setNotice('Preferencias de recordatorios guardadas.')
-  }
-
   async function quickAdd(volume: number) {
     const value: EntryForm = {
       drink_type: 'water',
@@ -329,10 +244,8 @@ function App() {
     if (!isSupabaseConfigured || !supabase || !sessionUser) {
       setEntries([])
       setProfile(defaultProfile)
-      setReminders(defaultReminders)
       localStorage.removeItem('watermind.entries')
       localStorage.removeItem('watermind.profile')
-      localStorage.removeItem('watermind.reminders')
       setNotice('Se eliminaron los datos guardados en este navegador.')
       return
     }
@@ -345,7 +258,6 @@ function App() {
     setSessionUser(null)
     setEntries([])
     setProfile(defaultProfile)
-    setReminders(defaultReminders)
     setNotice('La cuenta y sus datos se eliminaron.')
   }
 
@@ -386,7 +298,6 @@ function App() {
           {navigation.map(({ id, label, icon: Icon }) => (
             <button key={id} className={`nav-item ${view === id ? 'active' : ''}`} onClick={() => setView(id)}>
               <Icon size={19} strokeWidth={1.8} /><span>{label}</span>
-              {id === 'reminders' && reminders.enabled && <span className="nav-dot" />}
             </button>
           ))}
         </nav>
@@ -443,7 +354,6 @@ function App() {
             onDelete={(entry) => void deleteEntry(entry)} />
         )}
         {view === 'statistics' && <StatisticsPage entries={entries} profile={profile} rangeDays={rangeDays} setRangeDays={setRangeDays} />}
-        {view === 'reminders' && <RemindersPage settings={reminders} onSave={(value) => void updateReminders(value)} />}
         {view === 'settings' && (
           <SettingsPage profile={profile} userEmail={sessionUser?.email} onSave={(value) => void updateProfile(value)}
             onExport={exportCsv} onDelete={() => void deleteAccount()} />
@@ -748,41 +658,6 @@ function StatCard({ icon: Icon, label, value, detail }: { icon: typeof Activity;
   return <section className="card stat-card"><span className="soft-icon"><Icon size={19} /></span><span className="stat-label">{label}</span><strong>{value}</strong><small>{detail}</small></section>
 }
 
-function RemindersPage({ settings, onSave }: { settings: ReminderSettings; onSave: (value: ReminderSettings) => void }) {
-  const [local, setLocal] = useState(settings)
-  const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>('Notification' in window ? Notification.permission : 'unsupported')
-  useEffect(() => setLocal(settings), [settings])
-  async function enableNotifications() {
-    if (!('Notification' in window)) {
-      setPermission('unsupported')
-      return
-    }
-    const result = await Notification.requestPermission()
-    setPermission(result)
-  }
-  function toggleDay(day: number) {
-    const weekdays = local.weekdays.includes(day) ? local.weekdays.filter((item) => item !== day) : [...local.weekdays, day]
-    setLocal({ ...local, weekdays })
-  }
-  const dayNames = ['D', 'L', 'M', 'X', 'J', 'V', 'S']
-  return (
-    <div className="page-stack narrow-stack">
-      <section className="card reminder-intro"><span className="large-soft-icon"><Bell size={22} /></span><div><span className="section-kicker">A TU RITMO</span><h3>Un recordatorio amable</h3><p>Una pequeña pausa para notar cómo te sientes. Puedes cambiar o pausar esto cuando quieras.</p></div><label className="switch"><input type="checkbox" checked={local.enabled} onChange={(event) => setLocal({ ...local, enabled: event.target.checked })} /><span /></label></section>
-      <section className="card settings-card">
-        <h3>Tu horario</h3>
-        <p className="card-subtitle">Los avisos funcionan mientras esta aplicación está abierta en el navegador.</p>
-        <div className="field-row"><label>Desde<input type="time" value={local.start_time} onChange={(event) => setLocal({ ...local, start_time: event.target.value })} /></label><label>Hasta<input type="time" value={local.end_time} onChange={(event) => setLocal({ ...local, end_time: event.target.value })} /></label></div>
-        <label className="form-field">Frecuencia<select value={local.interval_minutes} onChange={(event) => setLocal({ ...local, interval_minutes: Number(event.target.value) })}><option value={60}>Cada hora</option><option value={90}>Cada 90 minutos</option><option value={120}>Cada 2 horas</option><option value={180}>Cada 3 horas</option></select></label>
-        <label className="form-field">Volumen sugerido<input type="number" min="50" max="2000" step="50" value={local.suggested_volume_ml} onChange={(event) => setLocal({ ...local, suggested_volume_ml: Math.max(50, Math.min(2000, Number(event.target.value))) })} /></label>
-        <div className="form-field"><span className="field-label">Días de la semana</span><div className="weekday-picker">{dayNames.map((day, index) => <button key={`${day}-${index}`} className={local.weekdays.includes(index) ? 'selected' : ''} onClick={() => toggleDay(index)} aria-label={`Día ${day}`} aria-pressed={local.weekdays.includes(index)}>{day}</button>)}</div></div>
-        {permission !== 'granted' && <div className="permission-box"><Bell size={17} /><span>{permission === 'unsupported' ? 'Este navegador no admite notificaciones web.' : permission === 'denied' ? 'Las notificaciones están bloqueadas. Puedes permitirlas en la configuración del navegador.' : 'Permite notificaciones para recibir avisos mientras la app esté abierta.'}</span>{permission === 'default' && <button className="text-button" onClick={() => void enableNotifications()}>Permitir</button>}</div>}
-        <div className="settings-actions"><button className="secondary-button" onClick={() => { const next = { ...local, snoozed_until: Date.now() + 60 * 60_000 }; setLocal(next); onSave(next) }}>Silenciar 1 hora</button><button className="primary-button" onClick={() => onSave(local)}>Guardar recordatorios</button></div>
-      </section>
-      <p className="disclaimer"><CircleHelp size={15} /> Los navegadores pueden suspender tareas en segundo plano. Estos avisos no están garantizados cuando cierras la app o el navegador.</p>
-    </div>
-  )
-}
-
 function SettingsPage({ profile, userEmail, onSave, onExport, onDelete }: {
   profile: Profile; userEmail?: string; onSave: (value: Profile) => void; onExport: () => void;
   onDelete: () => void
@@ -807,7 +682,7 @@ function SettingsPage({ profile, userEmail, onSave, onExport, onDelete }: {
       <section className="card settings-card">
         <div className="settings-heading"><span className="large-soft-icon peach"><History size={21} /></span><div><span className="section-kicker">TUS DATOS</span><h3>Exportación y privacidad</h3></div></div>
         <p className="card-subtitle">Descarga una copia de tu historial en formato CSV. El archivo incluye fecha, bebida, volumen y estimación de hidratación.</p>
-        <div className="privacy-note"><strong>Qué almacenamos</strong><p>Tu nombre, preferencias, configuración de recordatorios y registros de bebidas. En modo local permanecen en este navegador. Con Supabase se guardan en la base de datos de tu proyecto y están protegidos por políticas de acceso por usuario.</p></div>
+        <div className="privacy-note"><strong>Qué almacenamos</strong><p>Tu nombre, preferencias y registros de bebidas. En modo local permanecen en este navegador. Con Supabase se guardan en la base de datos de tu proyecto y están protegidos por políticas de acceso por usuario.</p></div>
         <div className="settings-actions"><button className="secondary-button" onClick={onExport}>Descargar historial CSV</button><button className="danger-button" onClick={onDelete}>{isSupabaseConfigured ? 'Eliminar cuenta y datos' : 'Eliminar datos locales'}</button></div>
       </section>
       {!isSupabaseConfigured && <section className="card setup-card"><span className="large-soft-icon"><Droplets size={21} /></span><div><h3>Conecta tu propio proyecto Supabase</h3><p>Agrega las variables de entorno de tu proyecto y ejecuta la migración para activar cuentas, sincronización en PostgreSQL y copias de seguridad.</p><code>VITE_SUPABASE_URL</code><code>VITE_SUPABASE_ANON_KEY</code></div></section>}

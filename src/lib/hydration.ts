@@ -31,34 +31,12 @@ export type Profile = {
   theme: 'light' | 'dark'
 }
 
-export type ReminderSettings = {
-  enabled: boolean
-  start_time: string
-  end_time: string
-  interval_minutes: number
-  weekdays: number[]
-  suggested_volume_ml: number
-  snoozed_until: number | null
-  timezone: string
-}
-
 export const defaultProfile: Profile = {
   display_name: '',
   daily_goal_ml: 2000,
   preferred_unit: 'ml',
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
   theme: 'light',
-}
-
-export const defaultReminders: ReminderSettings = {
-  enabled: false,
-  start_time: '09:00',
-  end_time: '20:00',
-  interval_minutes: 120,
-  weekdays: [1, 2, 3, 4, 5, 6, 0],
-  suggested_volume_ml: 250,
-  snoozed_until: null,
-  timezone: defaultProfile.timezone,
 }
 
 export function dateKey(date: Date, timezone: string): string {
