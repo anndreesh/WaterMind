@@ -51,7 +51,6 @@ a { color: inherit; text-decoration: none; }
 .nav-item { width: 100%; min-height: 43px; display: flex; align-items: center; gap: 12px; border: 0; border-radius: 10px; padding: 0 12px; text-align: left; color: #82929e; background: transparent; transition: background .18s, color .18s; }
 .nav-item:hover { background: var(--bg); color: var(--text); }
 .nav-item.active { color: var(--blue-dark); background: var(--blue-pale); font-weight: 650; }
-.nav-dot { margin-left: auto; width: 6px; height: 6px; background: #efad7c; border-radius: 50%; }
 .sidebar-bottom { margin-top: auto; display: grid; gap: 7px; }
 .tip-card { margin: 0 1px 15px; padding: 15px 14px; display: flex; flex-direction: column; align-items: flex-start; gap: 7px; background: #f3f9fc; border: 1px solid #edf4f7; border-radius: 13px; color: #718896; font-size: 11px; line-height: 1.45; }
 :root[data-theme="dark"] .tip-card { background: #20323d; border-color: var(--line); }
@@ -283,7 +282,7 @@ a { color: inherit; text-decoration: none; }
   .quick-options { gap: 6px; }
   .activity-card, .chart-card { min-height: auto; }
   .app-footer { flex-direction: column; gap: 5px; padding-top: 21px; text-align: center; }
-  .mobile-nav { position: fixed; z-index: 20; inset: auto 0 0; display: grid; grid-template-columns: repeat(4, 1fr); padding: 7px 7px max(7px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--card); box-shadow: 0 -5px 16px #3149580a; }
+  .mobile-nav { position: fixed; z-index: 20; inset: auto 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 120px)); justify-content: center; padding: 7px 7px max(7px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--card); box-shadow: 0 -5px 16px #3149580a; }
   .mobile-nav button { height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: 0; background: transparent; color: #91a0aa; font-size: 9px; }
   .mobile-nav button.active { color: var(--blue-dark); }
   .page-stack { padding-top: 18px; gap: 13px; }
